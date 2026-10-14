@@ -70,9 +70,9 @@ export const LatencyWaterfall: React.FC<LatencyWaterfallProps> = ({ metrics }) =
           <span>800ms Target</span>
         </div>
         <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden flex">
-          <div style={{ width: `${Math.min(100, (data.stt_latency_ms / 800) * 100)}%` }} className="bg-cyan-500 h-full" title="STT" />
-          <div style={{ width: `${Math.min(100, (data.llm_ttft_ms / 800) * 100)}%` }} className="bg-purple-500 h-full" title="LLM TTFT" />
-          <div style={{ width: `${Math.min(100, (data.tts_ttfa_ms / 800) * 100)}%` }} className="bg-emerald-500 h-full" title="TTS TTFA" />
+          <div style={{ width: `${Math.min(100, ((data.stt_latency_ms ?? 0) / 800) * 100)}%` }} className="bg-cyan-500 h-full" title="STT" />
+          <div style={{ width: `${Math.min(100, ((data.llm_ttft_ms ?? 0) / 800) * 100)}%` }} className="bg-purple-500 h-full" title="LLM TTFT" />
+          <div style={{ width: `${Math.min(100, ((data.tts_ttfa_ms ?? 0) / 800) * 100)}%` }} className="bg-emerald-500 h-full" title="TTS TTFA" />
         </div>
       </div>
     </div>

@@ -14,12 +14,11 @@ class AssistantBase(BaseModel):
     first_message: Optional[str] = "Hello! How can I help you today?"
     end_call_phrases: Optional[List[str]] = []
     silence_timeout_seconds: Optional[int] = 15
+
+class AssistantCreate(AssistantBase):
     stt_api_key: Optional[str] = None
     llm_api_key: Optional[str] = None
     tts_api_key: Optional[str] = None
-
-class AssistantCreate(AssistantBase):
-    pass
 
 class AssistantUpdate(BaseModel):
     name: Optional[str] = None
