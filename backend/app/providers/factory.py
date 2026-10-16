@@ -32,18 +32,15 @@ class ProviderFactory:
     ) -> BaseLLMProvider:
         name = (provider_name or "groq").lower()
         
-        if name == "groq":
-            key = api_key or settings.GROQ_API_KEY
-            selected_model = model or "qwen/qwen3.8-27b"
-            return GroqLLMProvider(api_key=key, model=selected_model)
-        
-        elif name in ["openrouter", "openai", "claude"]:
+        if name in ["openrouter", "openai", "claude"] or (model and "gpt-4o" in model):
             key = api_key or settings.OPENROUTER_API_KEY
             selected_model = model or "openai/gpt-4o-mini"
             return OpenRouterLLMProvider(api_key=key, model=selected_model)
         
         # Default to Groq
-        return GroqLLMProvider(api_key=api_key or settings.GROQ_API_KEY, model=model or "qwen/qwen3.8-27b")
+        key = api_key or settings.GROQ_API_KEY
+        selected_model = model or "qwen/qwen3.8-27b"
+        return GroqLLMProvider(api_key=key, model=selected_model)
 
     @staticmethod
     def get_tts_provider(

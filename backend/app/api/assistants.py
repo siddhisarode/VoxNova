@@ -6,8 +6,14 @@ from typing import List
 from app.db.database import get_db
 from app.db.models import Assistant
 from app.db.schemas import AssistantCreate, AssistantUpdate, AssistantResponse
+from app.core.prompts import strip_internal_boilerplate
 
 router = APIRouter(prefix="/assistants", tags=["Assistants"])
+
+def clean_assistant_response(ast: Assistant) -> Assistant:
+    if ast and ast.system_prompt:
+        ast.system_prompt = strip_internal_boilerplate(ast.system_prompt)
+    return ast
 
 @router.post("", response_model=AssistantResponse, status_code=status.HTTP_201_CREATED)
 async def create_assistant(data: AssistantCreate, db: AsyncSession = Depends(get_db)):
@@ -15,12 +21,13 @@ async def create_assistant(data: AssistantCreate, db: AsyncSession = Depends(get
     db.add(assistant)
     await db.commit()
     await db.refresh(assistant)
-    return assistant
+    return clean_assistant_response(assistant)
 
 @router.get("", response_model=List[AssistantResponse])
 async def list_assistants(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Assistant).order_by(Assistant.created_at.desc()))
-    return result.scalars().all()
+    assistants = result.scalars().all()
+    return [clean_assistant_response(a) for a in assistants]
 
 @router.get("/{assistant_id}", response_model=AssistantResponse)
 async def get_assistant(assistant_id: str, db: AsyncSession = Depends(get_db)):
@@ -28,7 +35,7 @@ async def get_assistant(assistant_id: str, db: AsyncSession = Depends(get_db)):
     assistant = result.scalar_one_or_none()
     if not assistant:
         raise HTTPException(status_code=404, detail="Assistant not found")
-    return assistant
+    return clean_assistant_response(assistant)
 
 @router.patch("/{assistant_id}", response_model=AssistantResponse)
 async def update_assistant(assistant_id: str, data: AssistantUpdate, db: AsyncSession = Depends(get_db)):
@@ -43,7 +50,7 @@ async def update_assistant(assistant_id: str, data: AssistantUpdate, db: AsyncSe
 
     await db.commit()
     await db.refresh(assistant)
-    return assistant
+    return clean_assistant_response(assistant)
 
 @router.delete("/{assistant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_assistant(assistant_id: str, db: AsyncSession = Depends(get_db)):

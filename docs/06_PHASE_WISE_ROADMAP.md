@@ -74,22 +74,26 @@ graph LR
 
 ---
 
-### Phase 5: Latency Waterfall Analytics & Call Log Persistence
-**Goal**: Capture precision timing metrics for every turn and persist completed call sessions into SQLite/PostgreSQL database.
+### Phase 5: Latency Waterfall Analytics, AI Call Summarization & Persistence
+**Goal**: Capture precision timing metrics, auto-generate structured post-call summaries, and persist sessions into SQLite/PostgreSQL.
 
 - **Tasks**:
   1. Complete `LatencyTracker` timestamp logging ($t_{\text{user\_eos}}$, $t_{\text{stt\_final}}$, $t_{\text{llm\_first\_token}}$, $t_{\text{tts\_first\_audio}}$).
-  2. Persist turn metrics and full transcript JSON to `CallLog` model on session disconnect.
-  3. Build `LatencyWaterfall.tsx` UI component in frontend call history drawer.
-- **Verification**: Conduct a test call, hang up, inspect DB record, and verify waterfall chart displays latency breakdown.
+  2. Implement ultra-fast Groq post-call summarization service (`qwen/qwen3.8-27b` extracting summary, discussion points, outcome, and sentiment) with heuristic fallback.
+  3. Safe schema migration on SQLite adding `summary`, `discussion_points`, `outcome`, and `sentiment` to `CallLog`.
+  4. Expose `POST /api/calls/{id}/summarize` and `GET /api/calls/export?format=csv|json`.
+  5. Build AI Conversation Insights Card & Sentiment Badges in Dashboard modal and CSV export button in Call History.
+- **Verification**: All 13 unit tests pass (`test_call_summary.py`, `test_api.py`, `test_voice_engine.py`); frontend builds with 0 errors (`npm run build`). [STATUS: ✅ COMPLETE]
 
 ---
 
-### Phase 6: Telephony Integration & Full System End-to-End Verification
-**Goal**: Validate full system reliability, test fallback providers, and prepare production build.
+### Phase 6: Function Calling (Tool Engine), Telephony & End-to-End Hardening
+**Goal**: Integrate tool calling mid-conversation (Vapi tools), complete Twilio Media Streams handler, and production packaging.
 
 - **Tasks**:
-  1. Test Twilio audio stream handler (`backend/app/voice/twilio.py`) converting 8kHz G.711 $\mu$-law to 16kHz PCM.
-  2. Verify graceful provider fallbacks when API keys are missing or invalid.
-  3. Run frontend production build (`npm run build`) and backend schema validation.
-- **Verification**: Run end-to-end verification test suite and confirm zero critical console errors or unhandled exceptions.
+  1. **Tool Calling Engine**: Connect `backend/app/tools/engine.py` into `VoicePipeline` for `end_call`, `transfer_call`, and custom CRM/webhook triggers mid-dialogue.
+  2. **Automated End-Call Detection**: Evaluate `end_call_phrases` during user speech and assistant farewells to gracefully terminate WebSocket sessions.
+  3. **Twilio Media Streams**: Deploy `/ws/twilio/{assistant_id}` bridging 8kHz G.711 $\mu$-law telephony audio to 16kHz Linear PCM.
+  4. **Docker Compose & Deployment Spec**: Containerize backend (FastAPI/Uvicorn) and frontend (Next.js) for single-command production deployment.
+- **Verification**: Run end-to-end verification test suite and confirm zero critical console errors or unhandled exceptions. [STATUS: 🔄 IN PROGRESS]
+

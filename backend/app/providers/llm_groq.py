@@ -35,7 +35,16 @@ class GroqLLMProvider(BaseLLMProvider):
         formatted_messages = []
         if system_prompt:
             formatted_messages.append({"role": "system", "content": system_prompt})
-        formatted_messages.extend(messages)
+        for m in messages:
+            content = m.get("content", "").strip()
+            if not content:
+                continue
+            role = m.get("role", "user")
+            if formatted_messages and formatted_messages[-1]["role"] == role and role != "system":
+                if formatted_messages[-1]["content"] != content:
+                    formatted_messages[-1]["content"] += f". {content}"
+            else:
+                formatted_messages.append({"role": role, "content": content})
 
         # Build list of model candidates to attempt in sequence (prioritizing working models on Groq API)
         candidate_order = [self.model, "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant", "llama-3.3-70b-versatile"]

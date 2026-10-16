@@ -35,15 +35,12 @@ class FallbackTTSProvider(BaseTTSProvider):
             loop = asyncio.get_running_loop()
             mp3_bytes = await loop.run_in_executor(None, generate_mp3)
 
-            # Stream in 1KB chunks
-            chunk_size = 1024
-            for i in range(0, len(mp3_bytes), chunk_size):
-                if cancellation_token and cancellation_token.is_cancelled():
-                    logger.info("Fallback TTS interrupted by barge-in!")
-                    break
-                chunk = mp3_bytes[i:i + chunk_size]
-                yield chunk
-                await asyncio.sleep(0.01)
+            # Yield complete MP3 buffer intact to avoid broken audio frames
+            if cancellation_token and cancellation_token.is_cancelled():
+                logger.info("Fallback TTS interrupted by barge-in!")
+                return
+            if mp3_bytes:
+                yield mp3_bytes
 
         except Exception as e:
             logger.warning(f"gTTS fallback failed ({e}), generating silent/simulated audio stream.")

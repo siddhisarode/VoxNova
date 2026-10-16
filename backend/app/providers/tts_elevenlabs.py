@@ -5,16 +5,18 @@ from app.providers.base import BaseTTSProvider
 from app.voice.barge_in import CancellationToken
 from app.core.config import settings
 
+from app.voice.speech_normalizer import normalize_speech_text
+
 logger = logging.getLogger("voxai.providers.elevenlabs")
 
 class ElevenLabsTTSProvider(BaseTTSProvider):
     """
     ElevenLabs TTS Provider using low-latency streaming endpoint.
-    Default voice: George (JBFqnCBsd6RMkjVDRZzb) or Sarah (EXAVITQu4vr4xnSDxMaL) supported on free & paid tiers.
+    Default voice: Sarah (EXAVITQu4vr4xnSDxMaL) or George (JBFqnCBsd6RMkjVDRZzb) - studio human realism.
     """
-    DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
+    DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 
-    def __init__(self, api_key: Optional[str] = None, voice_id: str = "JBFqnCBsd6RMkjVDRZzb"):
+    def __init__(self, api_key: Optional[str] = None, voice_id: str = "EXAVITQu4vr4xnSDxMaL"):
         self.api_key = api_key or settings.ELEVENLABS_API_KEY
         self.voice_id = voice_id or self.DEFAULT_VOICE_ID
         self.model_id = "eleven_turbo_v2_5" # Lowest latency model for voice calls
@@ -28,12 +30,16 @@ class ElevenLabsTTSProvider(BaseTTSProvider):
         if not text or not text.strip():
             return
 
+        cleaned_text = normalize_speech_text(text)
+        if not cleaned_text:
+            return
+
         initial_voice = voice_id or self.voice_id
         if not self.api_key:
             logger.warning("ELEVENLABS_API_KEY not set. Using fallback synthesizer.")
             from app.providers.tts_fallback import FallbackTTSProvider
             fallback = FallbackTTSProvider()
-            async for chunk in fallback.synthesize(text, cancellation_token=cancellation_token):
+            async for chunk in fallback.synthesize(cleaned_text, cancellation_token=cancellation_token):
                 yield chunk
             return
 
@@ -42,7 +48,7 @@ class ElevenLabsTTSProvider(BaseTTSProvider):
         if initial_voice and initial_voice != "21m00Tcm4TlvDq8ikWAM":
             voices_to_try.append(initial_voice)
 
-        for free_voice in [self.DEFAULT_VOICE_ID, "EXAVITQu4vr4xnSDxMaL", "cgSgspJ2msm6clMCkdW9", "pNInz6obpgDQGcFmaJgB"]:
+        for free_voice in [self.DEFAULT_VOICE_ID, "JBFqnCBsd6RMkjVDRZzb", "cgSgspJ2msm6clMCkdW9", "pNInz6obpgDQGcFmaJgB"]:
             if free_voice not in voices_to_try:
                 voices_to_try.append(free_voice)
 
@@ -55,11 +61,13 @@ class ElevenLabsTTSProvider(BaseTTSProvider):
         for target_voice in voices_to_try:
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{target_voice}/stream"
             payload = {
-                "text": text.strip(),
+                "text": cleaned_text,
                 "model_id": self.model_id,
                 "voice_settings": {
-                    "stability": 0.5,
+                    "stability": 0.50,
                     "similarity_boost": 0.75,
+                    "style": 0.20,
+                    "use_speaker_boost": True,
                     "optimize_streaming_latency": 3
                 }
             }
@@ -82,8 +90,16 @@ class ElevenLabsTTSProvider(BaseTTSProvider):
             except Exception as e:
                 logger.warning(f"ElevenLabs TTS exception for voice '{target_voice}': {e}")
 
-        # If all ElevenLabs voice attempts fail (e.g. key quota exceeded or free tier blocked), fallback to gTTS/synth
-        logger.info("All ElevenLabs voices failed or tier restriction hit. Using Fallback TTS provider.")
+        # If ElevenLabs fails (e.g. 401 or quota), fallback to ultra-natural Deepgram Aura before robotic gTTS
+        if settings.DEEPGRAM_API_KEY:
+            logger.info("ElevenLabs unavailable. Using high-fidelity Deepgram Aura human voice.")
+            from app.providers.tts_aura import DeepgramAuraTTSProvider
+            aura = DeepgramAuraTTSProvider(api_key=settings.DEEPGRAM_API_KEY, model="aura-asteria-en")
+            async for chunk in aura.synthesize(text, cancellation_token=cancellation_token):
+                yield chunk
+            return
+
+        logger.info("All primary voices unavailable. Using Fallback TTS provider.")
         from app.providers.tts_fallback import FallbackTTSProvider
         fallback = FallbackTTSProvider()
         async for chunk in fallback.synthesize(text, cancellation_token=cancellation_token):

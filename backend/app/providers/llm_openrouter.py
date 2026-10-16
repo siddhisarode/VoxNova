@@ -34,7 +34,16 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         formatted_messages = []
         if system_prompt:
             formatted_messages.append({"role": "system", "content": system_prompt})
-        formatted_messages.extend(messages)
+        for m in messages:
+            content = m.get("content", "").strip()
+            if not content:
+                continue
+            role = m.get("role", "user")
+            if formatted_messages and formatted_messages[-1]["role"] == role and role != "system":
+                if formatted_messages[-1]["content"] != content:
+                    formatted_messages[-1]["content"] += f". {content}"
+            else:
+                formatted_messages.append({"role": role, "content": content})
 
         payload = {
             "model": self.model,
@@ -52,11 +61,18 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 async with client.stream("POST", self.base_url, headers=headers, json=payload) as response:
                     if response.status_code != 200:
                         err_text = await response.aread()
                         logger.error(f"OpenRouter HTTP {response.status_code}: {err_text.decode('utf-8')}")
+                        # Fallback to Groq if available
+                        if settings.GROQ_API_KEY:
+                            from app.providers.llm_groq import GroqLLMProvider
+                            groq_fb = GroqLLMProvider(api_key=settings.GROQ_API_KEY, model="qwen/qwen3.8-27b")
+                            async for tok in groq_fb.stream_completion(messages, system_prompt, cancellation_token, temperature, max_tokens):
+                                yield tok
+                            return
                         async for token in self._simulated_stream(cancellation_token, f"[OpenRouter error {response.status_code}]"):
                             yield token
                         return
@@ -83,8 +99,14 @@ class OpenRouterLLMProvider(BaseLLMProvider):
                             continue
 
         except Exception as e:
-            logger.error(f"OpenRouter exception: {e}")
-            async for token in self._simulated_stream(cancellation_token, "OpenRouter connection issue."):
+            logger.error(f"OpenRouter exception: {e}. Falling back to Groq high-speed engine.")
+            if settings.GROQ_API_KEY:
+                from app.providers.llm_groq import GroqLLMProvider
+                groq_fb = GroqLLMProvider(api_key=settings.GROQ_API_KEY, model="qwen/qwen3.8-27b")
+                async for tok in groq_fb.stream_completion(messages, system_prompt, cancellation_token, temperature, max_tokens):
+                    yield tok
+                return
+            async for token in self._simulated_stream(cancellation_token, "I am here. How can I assist you?"):
                 yield token
 
     async def _simulated_stream(self, cancellation_token: Optional[CancellationToken], text: str = "Hello from OpenRouter voice assistant!") -> AsyncGenerator[str, None]:

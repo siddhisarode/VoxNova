@@ -24,10 +24,30 @@ AsyncSessionLocal = async_sessionmaker(
 
 Base = declarative_base()
 
+from sqlalchemy import text
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables initialized.")
+        # Safe migration for existing SQLite database
+        if "sqlite" in db_url:
+            columns_to_add = [
+                ("summary", "TEXT"),
+                ("discussion_points", "JSON"),
+                ("outcome", "TEXT"),
+                ("sentiment", "VARCHAR(50)")
+            ]
+            for col_name, col_type in columns_to_add:
+                try:
+                    await conn.execute(text(f"ALTER TABLE call_logs ADD COLUMN {col_name} {col_type}"))
+                except Exception:
+                    pass # Column already exists
+            try:
+                await conn.execute(text("ALTER TABLE assistants ADD COLUMN temperature FLOAT DEFAULT 0.7"))
+            except Exception:
+                pass # Column already exists
+    logger.info("Database tables initialized with summary & temperature schema.")
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
